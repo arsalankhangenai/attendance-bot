@@ -17,6 +17,9 @@ Env vars:
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import logging
 import os
 import random
@@ -29,7 +32,6 @@ from pathlib import Path
 from typing import Callable, Literal
 from urllib.parse import urlparse
 
-import pyotp
 import pytz
 from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
@@ -47,6 +49,21 @@ IST = pytz.timezone("Asia/Kolkata")
 Action = Literal["checkin", "checkout"]
 
 DEBUG_DIR = Path(os.environ.get("DEBUG_DIR", "/tmp/attendance-debug"))
+
+
+def _totp_now(secret: str, *, at: float | None = None, digits: int = 6, step: int = 30) -> str:
+    """RFC 6238 TOTP (HMAC-SHA1), the scheme authenticator apps use.
+
+    Written out instead of using pyotp: pyotp >= 2.10 rejects secrets under 112
+    bits, and the 16-character (80-bit) keys Zoho issues are exactly that.
+    """
+    key = base64.b32decode(secret.replace(" ", "").replace("-", "").upper().rstrip("=")
+                           + "=" * (-len(secret.replace(" ", "").replace("-", "").rstrip("=")) % 8))
+    counter = int((time.time() if at is None else at) // step)
+    digest = hmac.new(key, counter.to_bytes(8, "big"), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    code = (int.from_bytes(digest[offset:offset + 4], "big") & 0x7FFFFFFF) % (10 ** digits)
+    return str(code).zfill(digits)
 
 
 def _load_config() -> dict:
@@ -658,7 +675,7 @@ def _do_attendance(cfg: dict, action: Action, *, dry_run: bool = False) -> str:
 
                 otp_code = ""
                 if cfg["totp_secret"]:
-                    otp_code = pyotp.TOTP(cfg["totp_secret"]).now()
+                    otp_code = _totp_now(cfg["totp_secret"])
                     log.info("Generated TOTP")
                 elif cfg["outlook_email"] and cfg["outlook_pass"]:
                     log.info("Polling Outlook for Zoho code")

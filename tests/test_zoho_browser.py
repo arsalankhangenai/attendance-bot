@@ -136,3 +136,18 @@ def test_confirm_punch_gives_up_loudly(monkeypatch):
     with pytest.raises(zb.AttendanceError, match="still shows"):
         zb._confirm_punch(read, "checkout")
     assert len(reads) == 3
+
+
+# ── TOTP ─────────────────────────────────────────────────────────────────────
+
+def test_totp_matches_the_rfc_6238_vector():
+    import base64
+    secret = base64.b32encode(b"12345678901234567890").decode()
+
+    assert zb._totp_now(secret, at=59, digits=8) == "94287082"
+
+
+def test_totp_accepts_the_short_80_bit_keys_zoho_issues():
+    code = zb._totp_now("jbsw y3dp ehpk 3pxp", at=1_700_000_000)
+
+    assert len(code) == 6 and code.isdigit()
