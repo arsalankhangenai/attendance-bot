@@ -21,8 +21,12 @@ def _script_step() -> dict:
     return next(s for s in STEPS if s.get("run", "").strip() == "python zoho_browser.py")
 
 
-def test_only_a_dispatch_starts_the_workflow():
-    assert list(TRIGGERS) == ["workflow_dispatch"]  # no cron: Render keeps time
+CHECKIN_CRON, CHECKOUT_CRON = "30 6 * * 1-5", "30 16 * * 1-5"  # 12:00 / 22:00 IST, Mon-Fri
+
+
+def test_workflow_starts_from_a_dispatch_or_the_two_daily_crons():
+    assert sorted(TRIGGERS) == ["schedule", "workflow_dispatch"]
+    assert [c["cron"] for c in TRIGGERS["schedule"]] == [CHECKIN_CRON, CHECKOUT_CRON]
 
 
 def test_every_input_dispatch_sends_is_declared(github, cfg):
@@ -39,10 +43,13 @@ def test_inputs_are_typed_for_render_and_manual_runs():
     assert inputs["source"]["type"] == "string"
 
 
+SCHEDULED_ACTION = "${{ inputs.action || (github.event.schedule == '30 6 * * 1-5' && 'checkin' || 'checkout') }}"
+
+
 def _run_name(*, action: str, source: str, dry_run: bool) -> str:
     return (WORKFLOW["run-name"]
-            .replace("${{ inputs.action }}", action)
-            .replace("${{ inputs.source }}", source)
+            .replace(SCHEDULED_ACTION, action)
+            .replace("${{ inputs.source || 'schedule' }}", source)
             .replace("${{ inputs.dry_run && ' dry-run' || '' }}", " dry-run" if dry_run else ""))
 
 
@@ -65,7 +72,7 @@ def test_attendance_runs_one_at_a_time():
 
 def test_script_gets_the_inputs_as_env():
     env = _script_step()["env"]
-    assert env["ACTION"] == "${{ inputs.action }}"
+    assert env["ACTION"] == SCHEDULED_ACTION
     assert env["FORCE"] == "${{ inputs.force }}"
     assert env["DRY_RUN"] == "${{ inputs.dry_run }}"
 
@@ -76,3 +83,8 @@ def test_debug_screenshots_are_uploaded_even_when_a_retry_succeeds():
     assert upload["if"] == "always()"
     assert upload["with"]["path"] == _script_step()["env"]["DEBUG_DIR"]
     assert upload["with"]["if-no-files-found"] == "ignore"
+
+
+def test_scheduled_runs_pick_the_action_from_which_cron_fired():
+    # inputs.* is empty on a schedule, so the expression must decide by cron.
+    assert f"github.event.schedule == '{CHECKIN_CRON}' && 'checkin' || 'checkout'" in SCHEDULED_ACTION

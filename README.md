@@ -211,7 +211,7 @@ The first build pulls the Playwright base image (about 600 MB, 3–5 minutes). O
 ### Step 4: Run the browser on GitHub Actions
 
 1. **Add secrets to GitHub.** Fork → **Settings → Secrets and variables → Actions**. Add `ZOHO_EMAIL`, `ZOHO_PASSWORD`, and either `ZOHO_TOTP` or `OUTLOOK_EMAIL` + `OUTLOOK_PASSWORD`, with the same values you gave Render.
-2. **Enable the workflow.** On the **Actions** tab, open the attendance workflow and click **Enable workflow** if needed. It has no schedule of its own and only runs when dispatched.
+2. **Enable the workflow.** On the **Actions** tab, open the attendance workflow and click **Enable workflow** if needed. It also has its own GitHub cron (12:00 and 22:00 IST, Mon–Fri) that works without Render. GitHub cron can run late, and a duplicate fire alongside Render's dispatch is harmless.
 3. **Create a token.** GitHub → Settings → Developer settings → fine-grained tokens. Select only your fork and set **Actions: Read and write**. Note the expiry: dispatches fail once it expires.
 4. **Give it to Render.** Add `GH_DISPATCH_TOKEN` in the service's **Environment** tab. After the redeploy the log shows `Browser runs on GitHub Actions (<you>/attendance-bot, attendance.yml@main)`.
 

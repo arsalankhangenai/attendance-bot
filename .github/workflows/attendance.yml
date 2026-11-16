@@ -1,13 +1,17 @@
 name: Zoho People Attendance (Browser)
 
-# Started by the Render service (app.py) at the exact IST time. The browser runs
-# here because Render's free 512 MB instance runs out of memory on the Zoho
-# People app. No `schedule:` trigger: GitHub cron drifts, Render keeps time.
-# app.py's startup catch-up reads `run-name` to tell checkin from checkout, and
-# skips dry runs because they never punch.
-run-name: "attendance: ${{ inputs.action }} (${{ inputs.source }})${{ inputs.dry_run && ' dry-run' || '' }}"
+# Starts two ways: a GitHub cron at 12:00 and 22:00 IST (Mon-Fri), and
+# workflow_dispatch (the Render service, a catch-up, or you by hand). GitHub cron
+# can run late, so Render's exact-time dispatch is still welcome; a duplicate is
+# harmless because runs queue one at a time and the bot reads the attendance
+# record before it clicks. `run-name` is read by app.py's startup catch-up to
+# tell checkin from checkout, and dry runs are skipped because they never punch.
+run-name: "attendance: ${{ inputs.action || (github.event.schedule == '30 6 * * 1-5' && 'checkin' || 'checkout') }} (${{ inputs.source || 'schedule' }})${{ inputs.dry_run && ' dry-run' || '' }}"
 
 on:
+  schedule:
+    - cron: '30 6 * * 1-5'    # 12:00 IST check-in
+    - cron: '30 16 * * 1-5'   # 22:00 IST check-out
   workflow_dispatch:
     inputs:
       action:
@@ -70,7 +74,7 @@ jobs:
           ZOHO_TOTP: ${{ secrets.ZOHO_TOTP }}
           OUTLOOK_EMAIL: ${{ secrets.OUTLOOK_EMAIL }}
           OUTLOOK_PASSWORD: ${{ secrets.OUTLOOK_PASSWORD }}
-          ACTION: ${{ inputs.action }}
+          ACTION: ${{ inputs.action || (github.event.schedule == '30 6 * * 1-5' && 'checkin' || 'checkout') }}
           FORCE: ${{ inputs.force }}
           DRY_RUN: ${{ inputs.dry_run }}
           DEBUG_DIR: ${{ runner.temp }}/attendance-debug
